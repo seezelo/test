@@ -1,12 +1,10 @@
 export default async function handler(req, res) {
-  // ✅ 캐시 방지 (브라우저/엣지 캐시로 옛 응답 보는 것 차단)
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
+  res.setHeader("Cache-Control", "no-store");
 
-  const VERSION = "D15_SWITCH__2026-02-05__v1"; // ✅ 이게 응답에 보이면 새 코드 반영된 것
+  const VERSION = "D15_ENV_FIX__2026-02-05__v1";
 
   try {
+    // ✅ Vercel에 있는 변수명과 맞춤
     const keyId = process.env.NCP_KEY_ID;
     const secret = process.env.NCP_SECRET;
 
@@ -36,7 +34,6 @@ export default async function handler(req, res) {
     const params = new URLSearchParams({ start, goal, option: "trafast" });
     if (waypoints) params.append("waypoints", waypoints);
 
-    // ✅ 여기서 D15 엔드포인트로 강제
     const url =
       "https://naveropenapi.apigw.ntruss.com/map-direction-15/v1/driving?" +
       params.toString();
