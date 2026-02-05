@@ -5,29 +5,17 @@
 <title>Naver Directions Final</title>
 
 <style>
-body { margin:0; font-family:sans-serif; }
-#topbar {
-  padding:10px;
-  background:#f5f5f5;
-}
-#map {
-  width:100%;
-  height:500px;
-}
-#info {
-  padding:8px;
-}
-button {
-  padding:6px 10px;
-}
+  body { margin:0; font-family:sans-serif; }
+  #topbar { padding:10px; background:#f5f5f5; }
+  #map { width:100%; height:500px; }
+  #info { padding:8px; white-space:pre-wrap; }
+  button { padding:6px 10px; margin-right:6px; }
 </style>
 
-<!-- 네이버 지도 SDK -->
 <script src="https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=8vgpjrgiyy"></script>
 </head>
 
 <body>
-
 <div id="topbar">
   지도 클릭 → 출발 → 경유 → 도착 순서
   <button onclick="resetAll()">초기화</button>
@@ -53,10 +41,8 @@ naver.maps.Event.addListener(map, "click", e => {
     alert("출발/경유/도착 3개까지만");
     return;
   }
-
   const lat = e.coord.lat();
   const lng = e.coord.lng();
-
   points.push(`${lng},${lat}`);
 
   const colors = ["green","blue","red"];
@@ -64,14 +50,9 @@ naver.maps.Event.addListener(map, "click", e => {
     position: e.coord,
     map,
     icon: {
-      content:`<div style="
-        width:14px;height:14px;
-        background:${colors[points.length-1]};
-        border-radius:50%;
-      "></div>`
+      content:`<div style="width:14px;height:14px;background:${colors[points.length-1]};border-radius:50%"></div>`
     }
   });
-
   markers.push(marker);
 });
 
@@ -85,29 +66,46 @@ async function findRoute() {
   const goal = points[points.length - 1];
   const waypoints = points.length === 3 ? points[1] : "";
 
-  document.getElementById("info").innerText = "경로 계산 중...";
+  const infoEl = document.getElementById("info");
+  infoEl.innerText = "경로 계산 중...";
 
   try {
     const res = await fetch(`/api/directions?start=${start}&goal=${goal}&waypoints=${waypoints}`);
     const text = await res.text();
+    console.log("STATUS:", res.status);
     console.log("RAW:", text);
 
     let data;
     try {
       data = JSON.parse(text);
     } catch {
-      throw new Error("서버가 JSON이 아닌 HTML을 반환");
+      throw new Error("서버가 JSON이 아닌 응답을 반환");
     }
 
-    if (!data.route) throw new Error("경로 없음");
+    // ✅ 네이버 에러를 사람말로 보여주기
+    if (data?.error) {
+      const code = data.error.errorCode;
+      const msg = data.error.message;
+      const details = data.error.details || "";
+      infoEl.innerText =
+        `❌ NAVER API 오류\n` +
+        `code: ${code}\n` +
+        `message: ${msg}\n` +
+        `details: ${details}\n\n` +
+        `👉 NCP 콘솔에서 Directions 15 구독(Subscription) + 앱에서 API 체크 필요`;
+      return;
+    }
+
+    if (!data.route?.trafast?.[0]) {
+      infoEl.innerText = "❌ 경로 데이터가 없습니다.";
+      return;
+    }
 
     const route = data.route.trafast[0];
 
     if (polyline) polyline.setMap(null);
 
-    const path = route.path.map(p =>
-      new naver.maps.LatLng(p[1], p[0])
-    );
+    const path = route.path.map(p => new naver.maps.LatLng(p[1], p[0]));
 
     polyline = new naver.maps.Polyline({
       map,
@@ -117,11 +115,12 @@ async function findRoute() {
     });
 
     const min = Math.floor(route.summary.duration / 60000);
-    document.getElementById("info").innerText = `⏱ ${min}분`;
+    const km = (route.summary.distance / 1000).toFixed(1);
+    infoEl.innerText = `✅ 성공\n⏱ ${min}분\n📏 ${km}km`;
 
   } catch (err) {
     console.error(err);
-    document.getElementById("info").innerText = "❌ 경로 실패 (콘솔 확인)";
+    infoEl.innerText = "❌ 경로 실패 (콘솔 확인)";
   }
 }
 
@@ -129,12 +128,10 @@ function resetAll() {
   markers.forEach(m => m.setMap(null));
   markers = [];
   points = [];
-
   if (polyline) polyline.setMap(null);
-
+  polyline = null;
   document.getElementById("info").innerText = "초기화 완료";
 }
 </script>
-
 </body>
 </html>
