@@ -4,29 +4,30 @@ export default async function handler(req, res) {
     const secret = process.env.NCP_SECRET;
 
     if (!keyId || !secret) {
-      return res.status(500).json({
+      return res.status(200).json({
+        ok: false,
+        step: "env-check",
         error: "Missing env vars",
-        need: ["NCP_KEY_ID", "NCP_SECRET"],
         got: { NCP_KEY_ID: !!keyId, NCP_SECRET: !!secret }
       });
     }
 
     const { start, goal, waypoints = "" } = req.query;
+
     if (!start || !goal) {
-      return res.status(400).json({
+      return res.status(200).json({
+        ok: false,
+        step: "param-check",
         error: "start and goal required",
-        example: "/api/directions?start=126.9780,37.5665&goal=127.0276,37.4979"
+        example:
+          "/api/directions?start=126.9780,37.5665&goal=127.0276,37.4979"
       });
     }
 
-    const params = new URLSearchParams({
-      start,
-      goal,
-      option: "trafast"
-    });
+    const params = new URLSearchParams({ start, goal, option: "trafast" });
     if (waypoints) params.append("waypoints", waypoints);
 
-    // ✅ Directions 15 엔드포인트 (핵심 변경)
+    // ✅ Directions 15 엔드포인트 (핵심)
     const url =
       "https://naveropenapi.apigw.ntruss.com/map-direction-15/v1/driving?" +
       params.toString();
@@ -38,21 +39,23 @@ export default async function handler(req, res) {
       }
     });
 
-    const text = await upstream.text();
+    const raw = await upstream.text();
 
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return res.status(502).json({
-        error: "Upstream returned non-JSON",
-        upstream_status: upstream.status,
-        raw_head: text.slice(0, 300)
-      });
-    }
-
-    return res.status(upstream.status).json(data);
-  } catch (err) {
-    return res.status(500).json({ error: "Server crashed", message: err.message });
+    return res.status(200).json({
+      ok: upstream.ok,
+      step: "upstream-response",
+      upstream: {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        url
+      },
+      raw_head: raw.slice(0, 600)
+    });
+  } catch (e) {
+    return res.status(200).json({
+      ok: false,
+      step: "crash",
+      error: e?.message || String(e)
+    });
   }
 }
