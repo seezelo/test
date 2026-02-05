@@ -5,87 +5,160 @@
   <title>Naver Directions UI</title>
 
   <style>
-    body {
+    html, body {
       margin: 0;
-      font-family: system-ui, sans-serif;
+      padding: 0;
+      font-family: sans-serif;
     }
 
     #controls {
-      padding: 12px;
-      background: #ffffff;
+      padding: 10px;
+      background: #fafafa;
       border-bottom: 1px solid #ddd;
     }
 
     #controls input {
-      width: 180px;
-      padding: 6px;
+      width: 170px;
       margin-right: 6px;
     }
 
     #controls button {
-      padding: 6px 12px;
-      cursor: pointer;
+      padding: 4px 10px;
     }
 
+    /* 🔥 핵심: 지도는 무조건 px */
     #map {
       width: 100%;
-      height: 400px;
+      height: 500px;
+      background: #eee;
     }
 
     #info {
-      padding: 12px;
-      background: #fafafa;
+      padding: 10px;
       border-top: 1px solid #ddd;
+      background: #fff;
     }
   </style>
 
-  <!-- ✅ 네이버 지도 JS (중요: ncpKeyId) -->
+  <!-- ✅ 네이버 지도 (ncpKeyId 사용) -->
   <script src="https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=8vgpjrgiyy"></script>
 </head>
 
 <body>
-  <!-- 🔹 UI -->
+
   <div id="controls">
     출발:
-    <input id="start" placeholder="126.9780,37.5665" />
-
+    <input id="start" value="126.9780,37.5665" />
     경유:
-    <input id="waypoint" placeholder="127.0100,37.5200" />
-
+    <input id="waypoint" value="127.0100,37.5200" />
     도착:
-    <input id="goal" placeholder="127.0276,37.4979" />
-
-    <button onclick="searchRoute()">경로 찾기</button>
+    <input id="goal" value="127.0276,37.4979" />
+    <button onclick="drawRoute()">경로 찾기</button>
   </div>
 
-  <!-- 🔹 지도 -->
   <div id="map"></div>
-
-  <!-- 🔹 정보 -->
-  <div id="info">경로를 입력하고 버튼을 눌러주세요</div>
+  <div id="info">경로를 입력하고 버튼을 누르세요</div>
 
   <script>
     /***********************
-     * 1️⃣ 지도 생성
+     * API 키
+     ***********************/
+    const NCP_KEY_ID = "8vgpjrgiyy"; 
+    const NCP_SECRET = "R9xfzjMz2isJRQAQqv4xVWU6Rf0oyD9NQGJXjja1";
+
+    /***********************
+     * 지도 생성
      ***********************/
     const map = new naver.maps.Map("map", {
       center: new naver.maps.LatLng(37.5665, 126.9780),
       zoom: 12
     });
 
-    let routeLine = null;
+    let polyline = null;
+    let markers = [];
 
     /***********************
-     * 2️⃣ 경로 탐색
+     * 기존 지도 요소 제거
      ***********************/
-    async function searchRoute() {
-      const start = document.getElementById("start").value.trim();
-      const goal = document.getElementById("goal").value.trim();
-      const waypoint = document.getElementById("waypoint").value.trim();
-
-      if (!start || !goal) {
-        alert("출발과 도착은 필수입니다");
-        return;
+    function clearMap() {
+      if (polyline) {
+        polyline.setMap(null);
+        polyline = null;
       }
+      markers.forEach(m => m.setMap(null));
+      markers = [];
+    }
 
-      document.getElementById("info").innerText = "경로 계산 중...
+    /***********************
+     * 경로 요청 + 그리기
+     ***********************/
+    async function drawRoute() {
+      clearMap();
+
+      const start = document.getElementById("start").value;
+      const waypoint = document.getElementById("waypoint").value;
+      const goal = document.getElementById("goal").value;
+
+      const url =
+        "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving" +
+        `?start=${start}` +
+        `&goal=${goal}` +
+        (waypoint ? `&waypoints=${waypoint}` : "") +
+        `&option=trafast`;
+
+      document.getElementById("info").innerText = "경로 계산 중...";
+
+      try {
+        const res = await fetch(url, {
+          headers: {
+            "X-NCP-APIGW-API-KEY-ID": NCP_KEY_ID,
+            "X-NCP-APIGW-API-KEY": NCP_SECRET
+          }
+        });
+
+        const data = await res.json();
+        const route = data.route.trafast[0];
+
+        const path = route.path.map(p =>
+          new naver.maps.LatLng(p[1], p[0])
+        );
+
+        polyline = new naver.maps.Polyline({
+          map,
+          path,
+          strokeWeight: 6,
+          strokeColor: "#007AFF",
+          strokeOpacity: 0.85
+        });
+
+        // 마커
+        const points = [start, waypoint, goal].filter(Boolean);
+        points.forEach((p, idx) => {
+          const [lng, lat] = p.split(",").map(Number);
+          markers.push(new naver.maps.Marker({
+            position: new naver.maps.LatLng(lat, lng),
+            map,
+            title: idx === 0 ? "출발" : idx === points.length - 1 ? "도착" : "경유"
+          }));
+        });
+
+        // 지도 범위 자동 맞춤
+        const bounds = new naver.maps.LatLngBounds();
+        path.forEach(p => bounds.extend(p));
+        map.fitBounds(bounds);
+
+        const minutes = Math.floor(route.summary.duration / 60000);
+        const distance = (route.summary.distance / 1000).toFixed(1);
+
+        document.getElementById("info").innerHTML =
+          `⏱ ${minutes}분 · 📏 ${distance}km`;
+
+      } catch (e) {
+        console.error(e);
+        document.getElementById("info").innerText =
+          "❌ 경로 계산 실패 (콘솔 확인)";
+      }
+    }
+  </script>
+</body>
+</html>
