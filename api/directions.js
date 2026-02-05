@@ -14,7 +14,9 @@ export default async function handler(req, res) {
 
     // 2. API 엔드포인트 설정 (Directions 15 전용)
     // 주의: 주소 중간에 하이픈(-)이 없는 'map-direction15'가 맞습니다.
-    const baseUrl = "https://naveropenapi.apigw.ntruss.com/map-direction15/v1/driving";
+    //const baseUrl = "https://naveropenapi.apigw.ntruss.com/map-direction15/v1/driving";
+    // 혹시 모르니 v1 앞에 하이픈이 들어간 버전을 시도해 보세요.
+    const baseUrl = "https://naveropenapi.apigw.ntruss.com/map-direction-15/v1/driving";
 
     // 3. URLSearchParams를 사용하여 쿼리 스트링 조립
     const params = new URLSearchParams();
@@ -74,3 +76,4 @@ export default async function handler(req, res) {
     });
   }
 }
+
