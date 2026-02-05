@@ -1,4 +1,11 @@
 export default async function handler(req, res) {
+  // ✅ 캐시 방지 (브라우저/엣지 캐시로 옛 응답 보는 것 차단)
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
+  const VERSION = "D15_SWITCH__2026-02-05__v1"; // ✅ 이게 응답에 보이면 새 코드 반영된 것
+
   try {
     const keyId = process.env.NCP_KEY_ID;
     const secret = process.env.NCP_SECRET;
@@ -6,6 +13,7 @@ export default async function handler(req, res) {
     if (!keyId || !secret) {
       return res.status(200).json({
         ok: false,
+        version: VERSION,
         step: "env-check",
         error: "Missing env vars",
         got: { NCP_KEY_ID: !!keyId, NCP_SECRET: !!secret }
@@ -17,6 +25,7 @@ export default async function handler(req, res) {
     if (!start || !goal) {
       return res.status(200).json({
         ok: false,
+        version: VERSION,
         step: "param-check",
         error: "start and goal required",
         example:
@@ -27,7 +36,7 @@ export default async function handler(req, res) {
     const params = new URLSearchParams({ start, goal, option: "trafast" });
     if (waypoints) params.append("waypoints", waypoints);
 
-    // ✅ Directions 15 엔드포인트 (핵심)
+    // ✅ 여기서 D15 엔드포인트로 강제
     const url =
       "https://naveropenapi.apigw.ntruss.com/map-direction-15/v1/driving?" +
       params.toString();
@@ -43,6 +52,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: upstream.ok,
+      version: VERSION,
       step: "upstream-response",
       upstream: {
         status: upstream.status,
@@ -54,6 +64,7 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(200).json({
       ok: false,
+      version: VERSION,
       step: "crash",
       error: e?.message || String(e)
     });
