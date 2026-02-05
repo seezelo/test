@@ -1,97 +1,140 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <title>Naver Directions UI</title>
+<meta charset="UTF-8" />
+<title>Naver Directions Final</title>
 
-  <style>
-    body { margin:0; font-family:sans-serif; }
-    #controls {
-      padding:10px;
-      background:#f5f5f5;
-    }
-    #map { width:100%; height:500px; }
-  </style>
+<style>
+body { margin:0; font-family:sans-serif; }
+#topbar {
+  padding:10px;
+  background:#f5f5f5;
+}
+#map {
+  width:100%;
+  height:500px;
+}
+#info {
+  padding:8px;
+}
+button {
+  padding:6px 10px;
+}
+</style>
 
-  <!-- 네이버 지도 SDK (ncpKeyId 사용) -->
-  <script src="https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=8vgpjrgiyy"></script>
+<!-- 네이버 지도 SDK -->
+<script src="https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=8vgpjrgiyy"></script>
 </head>
 
 <body>
-  <div id="controls">
-    🟢 출발 → 🔵 경유 → 🔴 도착 순서로 지도 클릭  
-    <button onclick="findRoute()">경로 찾기</button>
-    <span id="info"></span>
-  </div>
 
-  <div id="map"></div>
+<div id="topbar">
+  지도 클릭 → 출발 → 경유 → 도착 순서
+  <button onclick="resetAll()">초기화</button>
+  <button onclick="findRoute()">경로찾기</button>
+</div>
 
-  <script>
-    let map, markers = [], polyline;
-    let points = [];
+<div id="map"></div>
+<div id="info">대기 중</div>
 
-    map = new naver.maps.Map("map", {
-      center: new naver.maps.LatLng(37.5665, 126.9780),
-      zoom: 12
-    });
+<script>
+let map;
+let points = [];
+let markers = [];
+let polyline = null;
 
-    // 지도 클릭 → 마커 추가
-    naver.maps.Event.addListener(map, "click", e => {
-      if (points.length >= 3) return alert("최대 3개 (출발/경유/도착)");
+map = new naver.maps.Map("map", {
+  center: new naver.maps.LatLng(37.5665, 126.9780),
+  zoom: 12
+});
 
-      const latlng = e.coord;
-      points.push(`${latlng.lng()},${latlng.lat()}`);
+naver.maps.Event.addListener(map, "click", e => {
+  if (points.length >= 3) {
+    alert("출발/경유/도착 3개까지만");
+    return;
+  }
 
-      const colors = ["green", "blue", "red"];
-      const marker = new naver.maps.Marker({
-        position: latlng,
-        map,
-        icon: {
-          content: `<div style="width:14px;height:14px;
-            background:${colors[points.length-1]};
-            border-radius:50%"></div>`
-        }
-      });
+  const lat = e.coord.lat();
+  const lng = e.coord.lng();
 
-      markers.push(marker);
-    });
+  points.push(`${lng},${lat}`);
 
-    async function findRoute() {
-      if (points.length < 2) {
-        alert("출발/도착 필요");
-        return;
-      }
-
-      const start = points[0];
-      const goal = points[points.length - 1];
-      const waypoints =
-        points.length === 3 ? points[1] : "";
-
-      const res = await fetch(
-        `/api/directions?start=${start}&goal=${goal}&waypoints=${waypoints}`
-      );
-
-      const data = await res.json();
-      const route = data.route.trafast[0];
-
-      // 경로 선 제거
-      if (polyline) polyline.setMap(null);
-
-      const path = route.path.map(p =>
-        new naver.maps.LatLng(p[1], p[0])
-      );
-
-      polyline = new naver.maps.Polyline({
-        map,
-        path,
-        strokeColor: "#007AFF",
-        strokeWeight: 6
-      });
-
-      const min = Math.floor(route.summary.duration / 60000);
-      document.getElementById("info").innerText =
-        ` ⏱ ${min}분`;
+  const colors = ["green","blue","red"];
+  const marker = new naver.maps.Marker({
+    position: e.coord,
+    map,
+    icon: {
+      content:`<div style="
+        width:14px;height:14px;
+        background:${colors[points.length-1]};
+        border-radius:50%;
+      "></div>`
     }
-  </script>
+  });
+
+  markers.push(marker);
+});
+
+async function findRoute() {
+  if (points.length < 2) {
+    alert("출발과 도착 필요");
+    return;
+  }
+
+  const start = points[0];
+  const goal = points[points.length - 1];
+  const waypoints = points.length === 3 ? points[1] : "";
+
+  document.getElementById("info").innerText = "경로 계산 중...";
+
+  try {
+    const res = await fetch(`/api/directions?start=${start}&goal=${goal}&waypoints=${waypoints}`);
+    const text = await res.text();
+    console.log("RAW:", text);
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("서버가 JSON이 아닌 HTML을 반환");
+    }
+
+    if (!data.route) throw new Error("경로 없음");
+
+    const route = data.route.trafast[0];
+
+    if (polyline) polyline.setMap(null);
+
+    const path = route.path.map(p =>
+      new naver.maps.LatLng(p[1], p[0])
+    );
+
+    polyline = new naver.maps.Polyline({
+      map,
+      path,
+      strokeColor:"#007AFF",
+      strokeWeight:6
+    });
+
+    const min = Math.floor(route.summary.duration / 60000);
+    document.getElementById("info").innerText = `⏱ ${min}분`;
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById("info").innerText = "❌ 경로 실패 (콘솔 확인)";
+  }
+}
+
+function resetAll() {
+  markers.forEach(m => m.setMap(null));
+  markers = [];
+  points = [];
+
+  if (polyline) polyline.setMap(null);
+
+  document.getElementById("info").innerText = "초기화 완료";
+}
+</script>
+
 </body>
 </html>
