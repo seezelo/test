@@ -1,27 +1,31 @@
 export default async function handler(req, res) {
   try {
-    /***********************
-     * ⚠️ 테스트용 하드코딩 키
-     ***********************/
-    const keyId = "8vgpjrgiyy";
-    const secret = "R9xfzjMz2isJRQAQqv4xVWU6Rf0oyD9NQGJXjja1";
+    const keyId = process.env.NCP_KEY_ID;
+    const secret = process.env.NCP_SECRET;
+
+    if (!keyId || !secret) {
+      return res.status(200).json({
+        ok: false,
+        step: "env-check",
+        error: "Missing env vars",
+        got: { NCP_KEY_ID: !!keyId, NCP_SECRET: !!secret }
+      });
+    }
 
     const { start, goal, waypoints = "" } = req.query;
 
     if (!start || !goal) {
-      return res.status(400).json({
+      return res.status(200).json({
+        ok: false,
+        step: "param-check",
         error: "start and goal required",
         example:
           "/api/directions?start=126.9780,37.5665&goal=127.0276,37.4979"
       });
     }
 
-    const params = new URLSearchParams({
-      start,
-      goal,
-      option: "trafast"
-    });
-
+    // ✅ 현재 사용 중인 URL (일단 그대로 두고 진단)
+    const params = new URLSearchParams({ start, goal, option: "trafast" });
     if (waypoints) params.append("waypoints", waypoints);
 
     const url =
@@ -35,24 +39,23 @@ export default async function handler(req, res) {
       }
     });
 
-    const text = await upstream.text();
+    const raw = await upstream.text();
 
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return res.status(502).json({
-        error: "NAVER returned non-JSON",
-        raw: text.slice(0, 300)
-      });
-    }
-
-    return res.status(upstream.status).json(data);
-
-  } catch (err) {
-    return res.status(500).json({
-      error: "Server crashed",
-      message: err.message
+    return res.status(200).json({
+      ok: upstream.ok,
+      step: "upstream-response",
+      upstream: {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        url
+      },
+      raw_head: raw.slice(0, 600)
+    });
+  } catch (e) {
+    return res.status(200).json({
+      ok: false,
+      step: "crash",
+      error: e?.message || String(e)
     });
   }
 }
